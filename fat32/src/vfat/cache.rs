@@ -1,5 +1,6 @@
 use std::{io, fmt};
 use std::collections::HashMap;
+use std::cmp::min;
 
 use traits::BlockDevice;
 
@@ -7,6 +8,15 @@ use traits::BlockDevice;
 struct CacheEntry {
     data: Vec<u8>,
     dirty: bool
+}
+
+impl CacheEntry {
+    pub fn default() -> CacheEntry {
+        CacheEntry {
+            data: vec![0u8; 512],
+            dirty: false,
+        }
+    }
 }
 
 pub struct CachedDevice {
@@ -25,6 +35,12 @@ impl CachedDevice {
         }
     }
 
+    fn insert_entry<T: BlockDevice + 'static + ?Sized>(device: &mut Box<T>, sector: u64)
+        -> io::Result<CacheEntry> {
+        let mut entry = CacheEntry::default();
+        device.read_sector(sector, entry.data.as_mut_slice())?;
+        Ok(entry)
+    }
     /// Returns a mutable reference to the cached sector `sector`. If the sector
     /// is not already cached, the sector is first read from the disk.
     ///
@@ -36,7 +52,12 @@ impl CachedDevice {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get_mut(&mut self, sector: u64) -> io::Result<&mut [u8]> {
-        unimplemented!("CachedDevice::get_mut()")
+        Ok(self.cache
+               .entry(sector)
+               .and_modify(|e| e.dirty = true)
+               .or_insert(Self::insert_entry(&mut self.device, sector)?)
+               .data
+               .as_mut_slice())
     }
 
     /// Returns a reference to the cached sector `sector`. If the sector is not
@@ -46,11 +67,34 @@ impl CachedDevice {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get(&mut self, sector: u64) -> io::Result<&[u8]> {
-        unimplemented!("CachedDevice::get()")
+        Ok(self.cache
+               .entry(sector)
+               .or_insert(Self::insert_entry(&mut self.device, sector)?)
+               .data
+               .as_slice())
     }
 }
 
 // FIXME: Implement `BlockDevice` for `CacheDevice`.
+impl BlockDevice for CachedDevice {
+    fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
+        let sec = self.get(n)?;
+        let len = min(sec.len(), buf.len());
+        buf.copy_from_slice(&sec[..len]);
+        Ok(len)
+    }
+
+    fn write_sector(&mut self, n: u64, buf: &[u8]) -> io::Result<usize> {
+        if buf.len() < self.sector_size() as usize {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
+                                      "buffer too small"));
+        }
+        let sec = self.get_mut(n)?;
+        let len = min(sec.len(), buf.len());
+        sec.copy_from_slice(&buf[..len]);
+        Ok(len)
+    }
+}
 
 impl fmt::Debug for CachedDevice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

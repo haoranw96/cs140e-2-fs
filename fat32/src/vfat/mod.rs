@@ -1,3 +1,5 @@
+#![feature(entry_and_modify)]
+
 pub(crate) mod file;
 pub(crate) mod dir;
 pub(crate) mod vfat;
@@ -21,3 +23,4 @@ pub use self::fat::{Status, FatEntry};
 pub use self::metadata::{Metadata, Attributes, Date, Time, Timestamp};
 pub use self::cache::CachedDevice;
 pub use self::shared::Shared;
+
