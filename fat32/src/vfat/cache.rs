@@ -4,19 +4,10 @@ use std::cmp::min;
 
 use traits::BlockDevice;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct CacheEntry {
     data: Vec<u8>,
     dirty: bool
-}
-
-impl CacheEntry {
-    pub fn default() -> CacheEntry {
-        CacheEntry {
-            data: vec![0u8; 512],
-            dirty: false,
-        }
-    }
 }
 
 pub struct CachedDevice {

@@ -3,25 +3,15 @@ use std::{fmt, io, mem, slice};
 use traits::BlockDevice;
 
 #[repr(C, packed)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct CHS {
     starting_head: u8,
     starting_sector: u8,
     starting_cylinder: u8,
 }
 
-impl CHS {
-    pub fn default() -> CHS {
-        CHS {
-            starting_head : 0,
-            starting_sector : 0,
-            starting_cylinder : 0,
-        }
-    }
-}
-
 #[repr(C, packed)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct PartitionEntry {
     boot_indicator: u8,
     start_chs: CHS,
@@ -31,23 +21,13 @@ pub struct PartitionEntry {
     total_sectors: u32,
 }
 
-impl PartitionEntry {
-    pub fn default() -> PartitionEntry {
-        PartitionEntry {
-            boot_indicator : 0,
-            start_chs: CHS::default(),
-            partition_type : 0,
-            end_chs: CHS::default(),
-            relative_sector : 0,
-            total_sectors : 0,
-        }
-    }
-}
-
 /// The master boot record (MBR).
 #[repr(C, packed)]
+#[derive(Default)]
 pub struct MasterBootRecord {
-    bootstrap: [u8; 436],
+    bootstrap_1: [u64; 32],
+    bootstrap_2: [u64; 22],
+    bootstrap_3: [u32; 1],
     disk_id: [u8; 10],
     partition_table: [PartitionEntry; 4],
     signature: [u8; 2],
@@ -64,15 +44,6 @@ pub enum Error {
 }
 
 impl MasterBootRecord {
-    pub fn default() -> MasterBootRecord {
-        MasterBootRecord{
-            bootstrap: [0; 436],
-            disk_id: [0; 10],
-            partition_table: [PartitionEntry::default(); 4],
-            signature: [0; 2],
-        }
-    }
-
     /// Reads and returns the master boot record (MBR) from `device`.
     ///
     /// # Errors
