@@ -5,20 +5,27 @@ use traits::BlockDevice;
 #[repr(C, packed)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct CHS {
-    starting_head: u8,
-    starting_sector: u8,
-    starting_cylinder: u8,
+    head: u8,
+    sector: u8,
+    cylinder: u8,
 }
+
+impl CHS {
+    pub fn get_sector(&self) -> u8 {
+        self.sector & 0b111111
+    }
+}
+
 
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct PartitionEntry {
-    boot_indicator: u8,
-    start_chs: CHS,
-    partition_type: u8,
-    end_chs: CHS,
-    relative_sector: u32,
-    total_sectors: u32,
+    pub boot_indicator: u8,
+    pub start_chs: CHS,
+    pub partition_type: u8,
+    pub end_chs: CHS,
+    pub relative_sector: u32,
+    pub total_sectors: u32,
 }
 
 /// The master boot record (MBR).
@@ -28,9 +35,9 @@ pub struct MasterBootRecord {
     bootstrap_1: [u64; 32],
     bootstrap_2: [u64; 22],
     bootstrap_3: [u32; 1],
-    disk_id: [u8; 10],
-    partition_table: [PartitionEntry; 4],
-    signature: [u8; 2],
+    pub disk_id: [u8; 10],
+    pub partition_table: [PartitionEntry; 4],
+    pub signature: [u8; 2],
 }
 
 #[derive(Debug)]
@@ -75,6 +82,17 @@ impl MasterBootRecord {
 
         Ok(mbr)
     }
+
+    pub fn first_fat32(&self) -> Option<&PartitionEntry> {
+        for i in 0..self.partition_table.len() {
+            let p = self.partition_table[i];
+            if p.partition_type == 0xB || p.partition_type == 0xC {
+                return Some(&self.partition_table[i])
+            }
+        }
+        None
+    }
+
 }
 
 impl fmt::Debug for MasterBootRecord {
