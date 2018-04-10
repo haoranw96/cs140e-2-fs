@@ -10,6 +10,8 @@ use vfat::{Metadata, Attributes, Timestamp, Time, Date};
 
 #[derive(Debug)]
 pub struct Dir {
+    first_cluster: Cluster,
+    vfat: Shared<VFat>,
     // FIXME: Fill me in.
 }
 
@@ -53,4 +55,28 @@ impl Dir {
     }
 }
 
+pub struct VFatDirEntryIter {
+    index: usize
+}
+
+impl Iterator for VFatDirEntryIter {
+    type Item = Entry;
+    fn next(&mut self) -> Option<Self::Item> {
+        unimplemented!()
+    }
+
+}
+
 // FIXME: Implement `trait::Dir` for `Dir`.
+impl traits::Dir for Dir {
+    /// The type of entry stored in this directory.
+    type Entry = Entry;
+
+    /// An type that is an iterator over the entries in this directory.
+    type Iter = VFatDirEntryIter;
+
+    /// Returns an interator over the entries in this directory.
+    fn entries(&self) -> io::Result<Self::Iter> {
+        unimplemented!()
+   }
+}

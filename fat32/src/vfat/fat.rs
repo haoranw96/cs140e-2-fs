@@ -20,12 +20,21 @@ pub enum Status {
 }
 
 #[repr(C, packed)]
+#[derive(Clone, Copy)]
 pub struct FatEntry(pub u32);
 
 impl FatEntry {
     /// Returns the `Status` of the FAT entry `self`.
     pub fn status(&self) -> Status {
-        unimplemented!("FatEntry::status()")
+        match self.0 & 0xFFFFFFF {
+            0x0000000 => Free,
+            0x0000001 => Reserved,
+            next @ 0x0000002 ... 0xFFFFFEF => Data(Cluster::from(next)),
+            0xFFFFFF0 ... 0xFFFFFF6 => Reserved,
+            0xFFFFFF7 => Bad,
+            last @ 0xFFFFFF8 ... 0xFFFFFFF => Eoc(last),
+            _ => unreachable!()
+        }
     }
 }
 
