@@ -6,6 +6,10 @@ use vfat::{VFat, Shared, Cluster, Metadata};
 
 #[derive(Debug)]
 pub struct File {
+    pub name: String,
+    pub vfat: Shared<VFat>,
+    pub first_cluster: Cluster,
+
     // FIXME: Fill me in.
 }
 
@@ -25,7 +29,13 @@ impl traits::File for File {
 
 impl io::Read for File {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        unimplemented!()
+        let mut v = Vec::new();
+        let read = self.vfat.borrow_mut().read_chain(self.first_cluster, &mut v)?;
+        let can_read = min(buf.len(), read);
+        for i in 0..can_read {
+            buf[i] = v.as_slice()[i];
+        }
+        Ok(can_read)
     }
 
 }

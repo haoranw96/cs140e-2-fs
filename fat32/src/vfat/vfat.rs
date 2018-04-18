@@ -25,15 +25,16 @@ impl VFat {
     pub fn from<T>(mut device: T) -> Result<Shared<VFat>, Error>
         where T: BlockDevice + 'static
     {
-        let mut dev = CachedDevice::new(device);
-        let mbr = MasterBootRecord::from(&mut dev)?;
+        let mbr = MasterBootRecord::from(&mut device)?;
         let bpb_start = mbr.partition_table[0].start_chs.get_sector();
-        let ebpb = BiosParameterBlock::from(&mut dev, bpb_start as u64)?;
-        let first_fat32 = mbr.first_fat32();
-        if let None = first_fat32 {
-            return Err(Error::NotFound);
-        }
-        let first_fat32_sec = first_fat32.unwrap().relative_sector;
+        let ebpb = BiosParameterBlock::from(&mut device, bpb_start as u64)?;
+        let mut dev = CachedDevice::new(device, 
+                                        Partition{
+                                            start: mbr.partition_table[0].relative_sector as u64,
+                                            sector_size: ebpb.bytes_per_sector as u64,
+                                        });
+        let first_fat32 = mbr.first_fat32().ok_or(Error::NotFound)?;
+        let first_fat32_sec = first_fat32.relative_sector;
 
         Ok(Shared::new(VFat {
             device: dev,

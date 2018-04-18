@@ -153,7 +153,11 @@ impl Iterator for VFatDirEntryIter {
                 vfat: self.vfat.clone(),
             }))
         } else {
-            Some(Entry::File(File{}))
+            Some(Entry::File(File{
+                name: name,
+                first_cluster: Cluster::from(first_cluster),
+                vfat: self.vfat.clone(),
+            }))
         }
     }
 
