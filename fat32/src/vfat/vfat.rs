@@ -7,7 +7,7 @@ use std::mem;
 use util::SliceExt;
 use mbr::{MasterBootRecord, PartitionEntry, CHS};
 use vfat::{Shared, Cluster, File, Dir, Entry, FatEntry, Error, Status};
-use vfat::{BiosParameterBlock, CachedDevice};
+use vfat::{BiosParameterBlock, CachedDevice, Partition};
 use traits::{FileSystem, BlockDevice};
 
 #[derive(Debug)]
