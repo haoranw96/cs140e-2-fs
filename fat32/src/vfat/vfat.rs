@@ -62,18 +62,15 @@ impl VFat {
     //        offset: usize,
     //        buf: &mut [u8]
     //    ) -> io::Result<usize>;
-    fn read_cluster(&mut self, cluster: Cluster, offset: usize, buf: &mut [u8])
+    pub fn read_cluster(&mut self, cluster: Cluster, offset: usize, buf: &mut [u8])
         -> io::Result<usize> {
-        let cluster_start = (cluster.get_index() as u64) * self.sectors_per_cluster as u64+ self.fat_start_sector;
-        let start_sector = cluster_start + (offset as u64) / self.bytes_per_sector as u64;
+        let cluster_start = cluster.get_index() as u64 * self.sectors_per_cluster as u64 + self.fat_start_sector;
+        let start_sector = cluster_start + offset as u64 / self.bytes_per_sector as u64;
         let end_sector = cluster_start + self.sectors_per_cluster as u64;
+        let can_read = buf.len() / self.bytes_per_sector as usize;
         let mut read = 0;
-        for i in start_sector..end_sector {
-            if read == buf.len() { break; }
-            let sec = self.device.get(i)?;
-            let can_read = min(buf.len() - read, sec.len());
-            buf[read..read+can_read].copy_from_slice(sec);
-            read += can_read;
+        for i in start_sector..min(end_sector, start_sector + can_read as u64) {
+            read += self.device.read_sector(i, &mut buf[read..])?;
         }
         Ok(read)
     }
@@ -86,20 +83,17 @@ impl VFat {
     //        start: Cluster,
     //        buf: &mut Vec<u8>
     //    ) -> io::Result<usize>;
-    fn read_chain(&mut self, start: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
+    pub fn read_chain(&mut self, start: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
         let mut cur_cluster = start;
         let mut read = 0;
         loop {
+            buf.reserve((self.bytes_per_sector as usize) * self.sectors_per_cluster as usize);
+            read += self.read_cluster(cur_cluster, 0, &mut buf.as_mut_slice()[read..])?;
             match self.fat_entry(cur_cluster)?.status() {
                 Status::Data(next_cluster) => {
-                    buf.reserve((self.bytes_per_sector as usize) * self.sectors_per_cluster as usize);
-                    read += self.read_cluster(cur_cluster, 0, &mut buf.as_mut_slice()[read..])?;
                     cur_cluster = next_cluster;
-                    continue;
                 }
                 Status::Eoc(_) => {
-                    buf.reserve((self.bytes_per_sector as usize) * self.sectors_per_cluster as usize);
-                    read += self.read_cluster(cur_cluster, 0, &mut buf.as_mut_slice()[read..])?;
                     return Ok(read);
                 },
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "sector unreadable"))
@@ -115,7 +109,7 @@ impl VFat {
     //    reference points directly into a cached sector.
     //
     //    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry>;
-    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
+    pub fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
         let entries_per_sector = self.bytes_per_sector as usize * mem::size_of::<FatEntry>();
         let nth_sec_in_fat = cluster.get_index() as usize / entries_per_sector;
         let index_in_sector = cluster.get_index() as usize % entries_per_sector;
