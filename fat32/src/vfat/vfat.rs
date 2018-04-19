@@ -26,15 +26,14 @@ impl VFat {
         where T: BlockDevice + 'static
     {
         let mbr = MasterBootRecord::from(&mut device)?;
-        let bpb_start = mbr.partition_table[0].start_chs.get_sector();
-        let ebpb = BiosParameterBlock::from(&mut device, bpb_start as u64)?;
-        let mut dev = CachedDevice::new(device, 
+        let bpb_start = mbr.first_fat32().ok_or(Error::NotFound)?
+                           .relative_sector as u64;
+        let ebpb = BiosParameterBlock::from(&mut device, bpb_start)?;
+        let dev = CachedDevice::new(device, 
                                         Partition{
                                             start: mbr.partition_table[0].relative_sector as u64,
                                             sector_size: ebpb.bytes_per_sector as u64,
                                         });
-        let first_fat32 = mbr.first_fat32().ok_or(Error::NotFound)?;
-        let first_fat32_sec = first_fat32.relative_sector;
 
         Ok(Shared::new(VFat {
             device: dev,
@@ -47,7 +46,7 @@ impl VFat {
                     ebpb.sectors_per_fat as u32
                 }
             },
-            fat_start_sector: first_fat32_sec as u64 + ebpb.num_reserved_sectors as u64,
+            fat_start_sector: bpb_start + ebpb.num_reserved_sectors as u64,
             data_start_sector: ebpb.sectors_per_cluster as u64,
             root_dir_cluster: Cluster::from(ebpb.root_cluster)
         }))

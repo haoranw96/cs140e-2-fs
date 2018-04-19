@@ -5,10 +5,9 @@ use traits::BlockDevice;
 use vfat::Error;
 
 #[repr(C, packed)]
-#[derive(Default)]
 pub struct BiosParameterBlock {
     /* BPB */
-    jump_short_nop: [u8; 3],
+    pub jump_short_nop: [u8; 3],
     pub oem_id: u64,
     pub bytes_per_sector: u16,
     pub sectors_per_cluster: u8,
@@ -38,10 +37,8 @@ pub struct BiosParameterBlock {
     pub sys_id_str: [u8; 8],
     /* boot code separate into 3 parts to
      * make derive(Default) available*/
-    boot_code_1: [u64; 32],
-    boot_code_2: [u64; 20],
-    boot_code_3: [u32; 1],
-    bootable_signature: u16, 
+    pub boot_code: [u8; 420],
+    pub bootable_signature: u16, 
 }
 
 impl BiosParameterBlock {
@@ -60,15 +57,11 @@ impl BiosParameterBlock {
         mut device: T,
         sector: u64
     ) -> Result<BiosParameterBlock, Error> {
-        let mut bpb = Self::default();
-        let mut bpb_buf = unsafe {
-            slice::from_raw_parts_mut(&mut bpb as *mut BiosParameterBlock as *mut u8,
-                                  mem::size_of::<BiosParameterBlock>())
-        };
-
+        let mut bpb_buf = [0u8; mem::size_of::<BiosParameterBlock>()];
         if let Err(e) = device.read_sector(sector, &mut bpb_buf) {
             return Err(Error::Io(e));
         }
+        let bpb : BiosParameterBlock = unsafe{ mem::transmute(bpb_buf) };
 
         if bpb.bootable_signature != 0xAA55 {
             return Err(Error::BadSignature);

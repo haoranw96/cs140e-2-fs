@@ -10,13 +10,6 @@ pub struct CHS {
     cylinder: u8,
 }
 
-impl CHS {
-    pub fn get_sector(&self) -> u8 {
-        self.sector & 0b111111
-    }
-}
-
-
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct PartitionEntry {
@@ -30,11 +23,8 @@ pub struct PartitionEntry {
 
 /// The master boot record (MBR).
 #[repr(C, packed)]
-#[derive(Default)]
 pub struct MasterBootRecord {
-    bootstrap_1: [u64; 32],
-    bootstrap_2: [u64; 22],
-    bootstrap_3: [u32; 1],
+    pub bootstrap: [u8; 436],
     pub disk_id: [u8; 10],
     pub partition_table: [PartitionEntry; 4],
     pub signature: [u8; 2],
@@ -60,21 +50,17 @@ impl MasterBootRecord {
     /// boot indicator. Returns `Io(err)` if the I/O error `err` occured while
     /// reading the MBR.
     pub fn from<T: BlockDevice>(mut device: T) -> Result<MasterBootRecord, Error> {
-        let mut mbr = Self::default();
-        let mut mbr_buf = unsafe {
-            slice::from_raw_parts_mut(&mut mbr as *mut MasterBootRecord as *mut u8,
-                                      mem::size_of::<MasterBootRecord>())
-        };
-        if let Err(e) = device.read_sector(0, &mut mbr_buf) {
-            return Err(Error::Io(e));
-        }
+        let mut mbr_buf = [0u8; mem::size_of::<MasterBootRecord>()];
+        let read = device.read_sector(0, &mut mbr_buf)
+                         .map_err(|e|{Error::Io(e)})?;
+        let mbr : MasterBootRecord = unsafe { mem::transmute(mbr_buf) };
 
         if mbr.signature != [0x55, 0xAA] {
             return Err(Error::BadSignature);
         }
 
         for i in 0..mbr.partition_table.len() {
-            let part_tab = mbr.partition_table[i];
+            let part_tab = &mbr.partition_table[i];
             if part_tab.boot_indicator != 0 && part_tab.boot_indicator !=  0x80 {
                 return Err(Error::UnknownBootIndicator(i as u8));
             }
