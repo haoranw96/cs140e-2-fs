@@ -15,7 +15,7 @@ pub struct Time(u16);
 /// File attributes as represented in FAT32 on-disk structures.
 #[repr(C, packed)]
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Attributes(u8);
+pub struct Attributes(pub u8);
 
 impl Attributes {
     const READ_ONLY: u8 = 0x01;
@@ -78,15 +78,15 @@ pub struct Metadata {
 impl traits::Timestamp for Timestamp {
     fn year(&self) -> usize { (self.date.0 >> 9) as usize + 1980 }
 
-    fn month(&self) -> u8 { (self.date.0 as u8 & 0xF0) >> 5 }
+    fn month(&self) -> u8 { (self.date.0 as u8 & 0x1E0) >> 5 }
 
-    fn day(&self) -> u8 { self.date.0 as u8 & 0xF }
+    fn day(&self) -> u8 { self.date.0 as u8 & 0x1F }
 
     fn hour(&self) -> u8 { (self.time.0 >> 11) as u8 }
 
-    fn minute(&self) -> u8 { (self.time.0 >> 5) as u8 & 0x3F }
+    fn minute(&self) -> u8 { ((self.time.0 & 0x7E0) >> 5) as u8 }
 
-    fn second(&self) -> u8 { self.time.0 as u8 & 0xF }
+    fn second(&self) -> u8 { (self.time.0 as u8 & 0xF) * 2 }
 }
 
 impl traits::Metadata for Metadata {
@@ -112,3 +112,15 @@ impl traits::Metadata for Metadata {
 }
 
 // FIXME: Implement `fmt::Display` (to your liking) for `Metadata`.
+impl fmt::Display for Metadata {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Metadata")
+         .field("attr", &format!("{:?}", &self.attr))
+         .field("ctime_tenth_sec", &self.ctime_tenth_sec)
+         .field("ctime", &self.ctime)
+         .field("adata", &self.adate)
+         .field("mtime", &self.mtime)
+         .finish()
+    }
+
+}

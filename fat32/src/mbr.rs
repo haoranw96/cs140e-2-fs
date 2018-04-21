@@ -51,8 +51,7 @@ impl MasterBootRecord {
     /// reading the MBR.
     pub fn from<T: BlockDevice>(mut device: T) -> Result<MasterBootRecord, Error> {
         let mut mbr_buf = [0u8; mem::size_of::<MasterBootRecord>()];
-        let read = device.read_sector(0, &mut mbr_buf)
-                         .map_err(|e|{Error::Io(e)})?;
+        device.read_sector(0, &mut mbr_buf).map_err(|e|{Error::Io(e)})?;
         let mbr : MasterBootRecord = unsafe { mem::transmute(mbr_buf) };
 
         if mbr.signature != [0x55, 0xAA] {

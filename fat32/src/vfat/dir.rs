@@ -1,8 +1,7 @@
 use std::ffi::OsStr;
-use std::char::decode_utf16;
+use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
 use std::borrow::Cow;
 use std::io;
-use std::mem;
 use std::collections::HashMap;
 use std::string::String;
 
@@ -13,14 +12,35 @@ use vfat::{Metadata, Attributes, Timestamp, Time, Date};
 
 #[derive(Debug)]
 pub struct Dir {
-    name: String,
-    first_cluster: Cluster,
-    vfat: Shared<VFat>,
+    pub name: String,
+    pub first_cluster: Cluster,
+    pub vfat: Shared<VFat>,
+    pub metadata: Metadata,
     // FIXME: Fill me in.
 }
 
+impl Dir {
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
+
+    pub fn root(vfat: Shared<VFat>) -> Dir {
+        Dir{
+            name: String::from("/"),
+            first_cluster: vfat.borrow().root_dir_cluster,
+            vfat: vfat.clone(),
+            metadata: Metadata::default(),
+        }
+    }
+
+}
+
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct VFatRegularDirEntry {
     name: [u8; 8],
     ext: [u8; 3],
@@ -35,8 +55,21 @@ pub struct VFatRegularDirEntry {
     file_sz: u32,
 }
 
+impl VFatRegularDirEntry {
+    pub fn metadata(&self) -> Metadata {
+        Metadata {
+            attr: self.attr,
+            ctime_tenth_sec: self.ctime_tenth_sec,
+            ctime: self.ctime,
+            adate: self.adate,
+            mtime: self.mtime,
+        }
+    }
+
+}
+
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct VFatLfnDirEntry {
     seq: u8,
     chars1: [u16; 5],
@@ -49,13 +82,12 @@ pub struct VFatLfnDirEntry {
 }
 
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct VFatUnknownDirEntry {
     id: u8,
-    reserved1: [u8; 9],
+    reserved1: [u8; 10],
     attr: Attributes,
-    reserved2: [u8; 21],
-    // FIXME: Fill me in.
+    reserved2: [u8; 20],
 }
 
 pub union VFatDirEntry {
@@ -102,17 +134,16 @@ pub struct VFatDirEntryIter {
 impl Iterator for VFatDirEntryIter {
     type Item = Entry;
     fn next(&mut self) -> Option<Self::Item> {
-        let first_entry = self.iter;
         let mut name_hash = HashMap::new();
         
         for (i, entry) in self.entries.as_slice()[self.iter..].iter().enumerate() {
             if entry.id == 0x00 { return None; }
-            else if entry.id == 0xE5 { continue } 
+            else if entry.id == 0xE5 { 
+                self.iter += 1;
+                continue 
+            }
 
-
-            self.iter += 1;
-
-            if entry.attr.lfn() {
+            if entry.attr.0 == 15 {
                 let mut v = Vec::new();
                 let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry as *const VFatLfnDirEntry) };
                 v.extend_from_slice(&entry.chars1);
@@ -122,9 +153,10 @@ impl Iterator for VFatDirEntryIter {
             } else {
                 break;
             }
+            self.iter += 1;
         }
 
-        let entry = unsafe{ &*(&self.entries.as_slice()[self.iter] 
+        let entry = unsafe{ &*(&self.entries.as_slice()[self.iter]
                                as *const VFatUnknownDirEntry 
                                as *const VFatRegularDirEntry) };
 
@@ -135,28 +167,48 @@ impl Iterator for VFatDirEntryIter {
                 name_vec.push(b'.');
                 name_vec.extend_from_slice(&entry.ext);
             }
+//            println!("name vec u8 {:?}", name_vec);
+            let mut i = 0;
+            for i in 0..name_vec.len() {
+                if name_vec[i] == 0x00 || name_vec[i] == 0x20 {
+                    name_vec.truncate(i);
+                    break;
+                }
+            }
             String::from_utf8(name_vec).ok()?
         } else {
-            let mut name_vec = Vec::new();
+            let mut name_vec : Vec<u16> = Vec::new();
             for seq in 0..name_hash.len() {
                 let mut chars = name_hash.remove(&seq)?;
                 name_vec.append(&mut chars);
+            }
+//            println!("name vec {:?}", name_vec);
+            for i in 0..name_vec.len() {
+                if name_vec[i] == 0x0000 || name_vec[i] == 0xFFFF {
+                    name_vec.truncate(i);
+                    break
+                }
             }
             String::from_utf16(&name_vec).ok()?
         };
         let first_cluster = (entry.cluster_num_hi as u32) << 16 | entry.cluster_num_lo as u32;
 
+        let metadata = entry.metadata();
+
+        self.iter += 1;
         if entry.attr.directory() {
             Some(Entry::Dir(Dir{
                 name: name,
                 first_cluster: Cluster::from(first_cluster),
                 vfat: self.vfat.clone(),
+                metadata: metadata,
             }))
         } else {
             Some(Entry::File(File{
                 name: name,
                 first_cluster: Cluster::from(first_cluster),
                 vfat: self.vfat.clone(),
+                metadata: metadata,
             }))
         }
     }
@@ -173,18 +225,14 @@ impl traits::Dir for Dir {
 
     /// Returns an interator over the entries in this directory.
     fn entries(&self) -> io::Result<Self::Iter> {
+        println!("{:?}", self.vfat.borrow());
         let mut buf = Vec::new();
-        self.vfat
-            .borrow_mut()
+        self.vfat.borrow_mut()
             .read_chain(self.first_cluster, &mut buf)
-            .and_then(|read| {
-                Ok({
-                    let len = read * mem::size_of::<u8>() / mem::size_of::<VFatUnknownDirEntry>();
-                    let v = unsafe {Vec::from_raw_parts(buf.as_mut_ptr() as *mut _,
-                                                        len, len)};
-                    
-                    VFatDirEntryIter{entries: v, vfat: self.vfat.clone() ,iter: 0}
-                })
-            })
+            .and_then(|read| 
+                Ok(VFatDirEntryIter{entries: unsafe { buf.cast() }, 
+                                    vfat: self.vfat.clone(),
+                                    iter: 0})
+            )
     }
 }

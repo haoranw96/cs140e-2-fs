@@ -1,4 +1,4 @@
-use std::cmp::{min, max};
+use std::cmp::{min};
 use std::io::{self, SeekFrom};
 
 use traits;
@@ -9,8 +9,19 @@ pub struct File {
     pub name: String,
     pub vfat: Shared<VFat>,
     pub first_cluster: Cluster,
+    pub metadata: Metadata,
 
     // FIXME: Fill me in.
+}
+
+impl File {
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
 }
 
 // FIXME: Implement `traits::File` (and its supertraits) for `File`.

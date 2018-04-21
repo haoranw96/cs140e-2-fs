@@ -1,4 +1,3 @@
-#![feature(entry_and_modify)]
 
 pub(crate) mod file;
 pub(crate) mod dir;

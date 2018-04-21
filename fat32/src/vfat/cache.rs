@@ -71,12 +71,20 @@ impl CachedDevice {
         }
     }
 
-    fn insert_entry<T: BlockDevice + 'static + ?Sized>(device: &mut Box<T>, sector: u64)
+    fn read_entry_from_dev(&mut self, sector: u64)
         -> io::Result<CacheEntry> {
-        let mut entry = CacheEntry::default();
-        device.read_sector(sector, entry.data.as_mut_slice())?;
+        let (phy_sec, factor) = self.virtual_to_physical(sector);
+        let mut data = Vec::with_capacity(self.partition.sector_size as usize);
+        for i in 0..factor {
+            self.device.read_all_sector(phy_sec + i, &mut data)?;
+        }
+        let entry = CacheEntry {
+            data : data,
+            dirty : false,
+        };
         Ok(entry)
     }
+
     /// Returns a mutable reference to the cached sector `sector`. If the sector
     /// is not already cached, the sector is first read from the disk.
     ///
@@ -88,12 +96,11 @@ impl CachedDevice {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get_mut(&mut self, sector: u64) -> io::Result<&mut [u8]> {
-        Ok(self.cache
-               .entry(sector)
-               .and_modify(|e| e.dirty = true)
-               .or_insert(Self::insert_entry(&mut self.device, sector)?)
-               .data
-               .as_mut_slice())
+        if !self.cache.contains_key(&sector) {
+            let entry = self.read_entry_from_dev(sector)?;
+            self.cache.insert(sector, entry);
+        }
+        Ok(&mut self.cache.get_mut(&sector).unwrap().data)
     }
 
     /// Returns a reference to the cached sector `sector`. If the sector is not
@@ -103,11 +110,12 @@ impl CachedDevice {
     ///
     /// Returns an error if there is an error reading the sector from the disk.
     pub fn get(&mut self, sector: u64) -> io::Result<&[u8]> {
-        Ok(self.cache
-               .entry(sector)
-               .or_insert(Self::insert_entry(&mut self.device, sector)?)
-               .data
-               .as_slice())
+//        println!("getting sector {}", sector);
+        if !self.cache.contains_key(&sector) {
+            let entry = self.read_entry_from_dev(sector)?;
+            self.cache.insert(sector, entry);
+        }
+        Ok(&self.cache.get(&sector).unwrap().data)
     }
 }
 
@@ -136,7 +144,7 @@ impl BlockDevice for CachedDevice {
 impl fmt::Debug for CachedDevice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("CachedDevice")
-            .field("device", &"<block device>")
+//            .field("device", &"<block device>")
             .field("cache", &self.cache)
             .finish()
     }

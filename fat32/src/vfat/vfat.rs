@@ -1,6 +1,6 @@
 use std::io;
-use std::path::Path;
-use std::mem::size_of;
+use std::slice;
+use std::path::{Path, Component};
 use std::cmp::min;
 use std::mem;
 
@@ -12,13 +12,13 @@ use traits::{FileSystem, BlockDevice};
 
 #[derive(Debug)]
 pub struct VFat {
-    device: CachedDevice,
-    bytes_per_sector: u16,
-    sectors_per_cluster: u8,
-    sectors_per_fat: u32,
-    fat_start_sector: u64,
-    data_start_sector: u64,
-    root_dir_cluster: Cluster,
+    pub device: CachedDevice,
+    pub bytes_per_sector: u16,
+    pub sectors_per_cluster: u8,
+    pub sectors_per_fat: u32,
+    pub fat_start_sector: u64,
+    pub data_start_sector: u64,
+    pub root_dir_cluster: Cluster,
 }
 
 impl VFat {
@@ -26,28 +26,30 @@ impl VFat {
         where T: BlockDevice + 'static
     {
         let mbr = MasterBootRecord::from(&mut device)?;
+//        println!("mbr {:?}", mbr);
         let bpb_start = mbr.first_fat32().ok_or(Error::NotFound)?
                            .relative_sector as u64;
         let ebpb = BiosParameterBlock::from(&mut device, bpb_start)?;
+        println!("{:?}", mbr);
+        println!("{:?}", ebpb);
+        let fat_start_sector = ebpb.num_reserved_sectors as u64;
+        let data_start_sector = fat_start_sector +
+            (ebpb.num_fat as u64) * ebpb.sectors_per_fat() as u64;
+//        println!("fat_start_sector {} ebpb.num_fat {} ebpb.sectors_per_fat() {}", fat_start_sector, ebpb.num_fat, ebpb.sectors_per_fat());
+//        println!("ebpb {:?}", ebpb);
         let dev = CachedDevice::new(device, 
-                                        Partition{
-                                            start: mbr.partition_table[0].relative_sector as u64,
-                                            sector_size: ebpb.bytes_per_sector as u64,
-                                        });
+                                    Partition{
+                                        start: fat_start_sector,
+                                        sector_size: ebpb.bytes_per_sector as u64,
+                                    });
 
         Ok(Shared::new(VFat {
             device: dev,
             bytes_per_sector: ebpb.bytes_per_sector,
             sectors_per_cluster: ebpb.sectors_per_cluster,
-            sectors_per_fat: {
-                if ebpb.sectors_per_fat == 0 {
-                    ebpb.sectors_per_fat_32
-                } else {
-                    ebpb.sectors_per_fat as u32
-                }
-            },
+            sectors_per_fat: ebpb.sectors_per_fat(),
             fat_start_sector: bpb_start + ebpb.num_reserved_sectors as u64,
-            data_start_sector: ebpb.sectors_per_cluster as u64,
+            data_start_sector: data_start_sector,
             root_dir_cluster: Cluster::from(ebpb.root_cluster)
         }))
     }
@@ -64,12 +66,15 @@ impl VFat {
     //    ) -> io::Result<usize>;
     pub fn read_cluster(&mut self, cluster: Cluster, offset: usize, buf: &mut [u8])
         -> io::Result<usize> {
-        let cluster_start = cluster.get_index() as u64 * self.sectors_per_cluster as u64 + self.fat_start_sector;
-        let start_sector = cluster_start + offset as u64 / self.bytes_per_sector as u64;
+//        println!("vfat {:?}", self);
+        let cluster_start = (cluster.get_index() - 1) as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
+        let start_sector = cluster_start + offset as u64;
         let end_sector = cluster_start + self.sectors_per_cluster as u64;
         let can_read = buf.len() / self.bytes_per_sector as usize;
         let mut read = 0;
-        for i in start_sector..min(end_sector, start_sector + can_read as u64) {
+        let can_read_end = min(end_sector, start_sector + can_read as u64);
+
+        for i in start_sector..can_read_end {
             read += self.device.read_sector(i, &mut buf[read..])?;
         }
         Ok(read)
@@ -86,46 +91,67 @@ impl VFat {
     pub fn read_chain(&mut self, start: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
         let mut cur_cluster = start;
         let mut read = 0;
+//        println!("read chain from {:?}", start);
         loop {
-            buf.reserve((self.bytes_per_sector as usize) * self.sectors_per_cluster as usize);
+            buf.resize((self.bytes_per_sector as usize) * self.sectors_per_cluster as usize, 0);
             read += self.read_cluster(cur_cluster, 0, &mut buf.as_mut_slice()[read..])?;
             match self.fat_entry(cur_cluster)?.status() {
                 Status::Data(next_cluster) => {
-                    cur_cluster = next_cluster;
-                }
+                    cur_cluster = next_cluster; }
                 Status::Eoc(_) => {
                     return Ok(read);
                 },
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "sector unreadable"))
             }
         }
-        unreachable!();
     }
-
-
-
 
     //  * A method to return a reference to a `FatEntry` for a cluster where the
     //    reference points directly into a cached sector.
     //
     //    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry>;
     pub fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
-        let entries_per_sector = self.bytes_per_sector as usize * mem::size_of::<FatEntry>();
+        let entries_per_sector = self.bytes_per_sector as usize / mem::size_of::<FatEntry>();
         let nth_sec_in_fat = cluster.get_index() as usize / entries_per_sector;
         let index_in_sector = cluster.get_index() as usize % entries_per_sector;
-        let sec = self.device.get(nth_sec_in_fat as u64+ self.fat_start_sector as u64)?;
-        let fat_entries : &[FatEntry] = unsafe{mem::transmute(sec)};
-        Ok(&fat_entries[index_in_sector])
+        let sec = self.device.get(nth_sec_in_fat as u64 + self.fat_start_sector as u64)?;
+        let entries: &[FatEntry] = unsafe { sec.cast() };
+
+        let entry = entries[index_in_sector];
+//        println!("cluster: {:?} entries_per_sector {} nth_sec_in_fat {} entries.len {}, index_in_sector {}, entries {:?}",
+//                 cluster, entries_per_sector, nth_sec_in_fat, entries.len(), index_in_sector, entries);
+        Ok(&entries[index_in_sector])
     }
 }
 
 impl<'a> FileSystem for &'a Shared<VFat> {
-    type File = ::traits::Dummy;
-    type Dir = ::traits::Dummy;
-    type Entry = ::traits::Dummy;
+    type File = File;
+    type Dir = Dir;
+    type Entry = Entry;
 
     fn open<P: AsRef<Path>>(self, path: P) -> io::Result<Self::Entry> {
-        unimplemented!("FileSystem::open()")
+        use vfat::Entry as vfatEntry;
+        use traits::Entry;
+
+        let mut cur_dir = vfatEntry::Dir(Dir::root(self.clone()));
+
+        for comp in path.as_ref().components() {
+//            println!("comp: {:?}", comp);
+            match comp {
+                Component::RootDir => { },
+                Component::Normal(name) => {
+                    cur_dir = cur_dir.as_dir()
+                                     .ok_or(io::Error::new(io::ErrorKind::NotFound, 
+                                                           "File not found"))?
+                                     .find(name)?
+                }
+                Component::CurDir => unimplemented!("CurDir"),
+                Component::ParentDir => unimplemented!("ParentDir"),
+                Component::Prefix(_) => unimplemented!("Prefix"),
+            }
+        }
+        Ok(cur_dir)
+//        unimplemented!("FileSystem::open()")
     }
 
     fn create_file<P: AsRef<Path>>(self, _path: P) -> io::Result<Self::File> {

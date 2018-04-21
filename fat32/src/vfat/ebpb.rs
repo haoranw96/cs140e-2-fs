@@ -8,7 +8,7 @@ use vfat::Error;
 pub struct BiosParameterBlock {
     /* BPB */
     pub jump_short_nop: [u8; 3],
-    pub oem_id: u64,
+    pub oem_id: [u8; 8],
     pub bytes_per_sector: u16,
     pub sectors_per_cluster: u8,
     pub num_reserved_sectors: u16,
@@ -24,7 +24,7 @@ pub struct BiosParameterBlock {
     /* EBPB */
     pub sectors_per_fat_32: u32,
     pub flags: u16,
-    pub fat_version: u16,
+    pub fat_version: [u8;2],
     pub root_cluster: u32,
     pub fsinfo_sector: u16,
     pub backup_boot_sector: u16,
@@ -45,6 +45,23 @@ impl BiosParameterBlock {
     fn modify_byte_order(bpb: BiosParameterBlock) -> BiosParameterBlock {
         // Too lazy to implement, should have no problem on pi
         bpb
+    }
+
+    pub fn sectors_per_fat(&self) -> u32 {
+        if self.sectors_per_fat != 0 {
+            self.sectors_per_fat as u32
+        } else {
+            self.sectors_per_fat_32
+        }
+    }
+
+    pub fn total_logical_sectors(&self) -> u32 {
+        if self.total_logical_sectors != 0 {
+            self.total_logical_sectors as u32
+        } else {
+            self.total_logical_sectors_32
+        }
+    
     }
 
     /// Reads the FAT32 extended BIOS parameter block from sector `sector` of
@@ -74,21 +91,30 @@ impl BiosParameterBlock {
 impl fmt::Debug for BiosParameterBlock {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("BiosParameterBlock")
-            .field("reserved", &"<Reserved>")
-            .field("signature", &self.signature)
-            .field("oem id", &self.oem_id)
-            .field("bytes per sector", &self.bytes_per_sector)
-            .field("total sectors", &self.sectors_per_cluster)
-            .field("number of reserved sectors", &self.num_reserved_sectors)
-            .field("number of FAT", &self.num_fat)
-            .field("maximum directory entries", &self.max_dir_entries)
-            .field("total logical sectors", &self.total_logical_sectors)
-            .field("media description type", &self.media_desc_type)
-            .field("number of sectors per FAT", &self.sectors_per_fat)
-            .field("number of sectors per track", &self.sectors_per_track)
-            .field("number of heads", &self.num_heads)
-            .field("number of hidden sectors", &self.num_hidden_sectors)
-            .field("total logical sectors (32bits)", &self.total_logical_sectors_32)
-            .finish()
+         .field("oem id", &String::from_utf8_lossy(&self.oem_id))
+         .field("bytes per sector", &self.bytes_per_sector)
+         .field("sectors per cluster", &self.sectors_per_cluster)
+         .field("number of reserved sectors", &self.num_reserved_sectors)
+         .field("number of FAT", &self.num_fat)
+//         .field("maximum directory entries", &self.max_dir_entries)
+         .field("total logical sectors", &self.total_logical_sectors())
+         .field("media description type", &format!("0x{:X}", &self.media_desc_type))
+         .field("number of sectors per FAT", &self.sectors_per_fat())
+         .field("number of sectors per track", &self.sectors_per_track)
+         .field("number of heads", &self.num_heads)
+         .field("number of hidden sectors", &self.num_hidden_sectors)
+         .field("flags", &self.flags)
+         .field("fat_version", &self.fat_version)
+         .field("root_cluster", &self.root_cluster)
+         .field("fsinfo_sector", &self.fsinfo_sector)
+         .field("backup_boot_sector", &self.backup_boot_sector)
+         .field("drive_num", &format!("0x{:X}", &self.drive_num))
+         .field("win_nt_flag", &self.win_nt_flag)
+         .field("signature", &format!("0x{:X}", &self.signature))
+         .field("volumn_id", &format!("0x{:X}", &self.volumn_id))
+         .field("volumn_label", &String::from_utf8_lossy(&self.volumn_label))
+         .field("sys_id_str", &String::from_utf8_lossy(&self.sys_id_str))
+         .field("bootable_signature", &format!("0x{:X}",&self.bootable_signature))
+         .finish()
     }
 }

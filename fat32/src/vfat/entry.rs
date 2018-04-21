@@ -18,35 +18,57 @@ impl traits::Entry for Entry {
 
     /// The name of the file or directory corresponding to this entry.
     fn name(&self) -> &str {
-        unimplemented!()
+        match self {
+            &Entry::File(ref f) => &f.name(),
+            &Entry::Dir(ref d) => &d.name(),
+        }
     }
 
     /// The metadata associated with the entry.
     fn metadata(&self) -> &Self::Metadata {
-        unimplemented!()
+        match self {
+            &Entry::File(ref f) => &f.metadata(),
+            &Entry::Dir(ref d) => &d.metadata(),
+        }
     }
 
     /// If `self` is a file, returns `Some` of a reference to the file.
     /// Otherwise returns `None`.
     fn as_file(&self) -> Option<&Self::File> {
-        unimplemented!()
+        if let &Entry::File(ref f) = self {
+            Some(f)
+        } else {
+            None
+        }
     }
 
     /// If `self` is a directory, returns `Some` of a reference to the
     /// directory. Otherwise returns `None`.
     fn as_dir(&self) -> Option<&Self::Dir> {
-        unimplemented!()
+        if let &Entry::Dir(ref d) = self {
+            Some(d)
+        } else {
+            None
+        }
     }
 
     /// If `self` is a file, returns `Some` of the file. Otherwise returns
     /// `None`.
     fn into_file(self) -> Option<Self::File> {
-        unimplemented!()
+        if let Entry::File(f) = self {
+            Some(f)
+        } else {
+            None
+        }
     }
 
     /// If `self` is a directory, returns `Some` of the directory. Otherwise
     /// returns `None`.
     fn into_dir(self) -> Option<Self::Dir> {
-        unimplemented!()
+        if let Entry::Dir(d) = self {
+            Some(d)
+        } else {
+            None
+        }
     }
 }
