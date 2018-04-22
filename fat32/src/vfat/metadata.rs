@@ -93,6 +93,7 @@ pub struct Metadata {
     pub ctime: Timestamp,
     pub atime: Timestamp,
     pub mtime: Timestamp,
+    pub size: u32,
 }
 
 impl traits::Timestamp for Timestamp {

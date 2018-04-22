@@ -33,7 +33,7 @@ impl traits::File for File {
 
     /// Returns the size of the file in bytes.
     fn size(&self) -> u64 {
-        unimplemented!()
+        self.metadata.size as u64
     }
 
 }

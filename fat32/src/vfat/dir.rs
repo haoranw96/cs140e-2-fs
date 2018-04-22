@@ -75,6 +75,7 @@ impl VFatRegularDirEntry {
                 time: self.mtime,
                 date: self.mdate,
             },
+            size: self.file_sz,
         }
     }
 
