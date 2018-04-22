@@ -10,6 +10,7 @@ struct CacheEntry {
     dirty: bool
 }
 
+#[derive(Debug)]
 pub struct Partition {
     /// The physical sector where the partition begins.
     pub start: u64,
@@ -74,7 +75,9 @@ impl CachedDevice {
     fn read_entry_from_dev(&mut self, sector: u64)
         -> io::Result<CacheEntry> {
         let (phy_sec, factor) = self.virtual_to_physical(sector);
-        let mut data = Vec::with_capacity(self.partition.sector_size as usize);
+//        let mut data = Vec::with_capacity(self.partition.sector_size as usize);
+        let mut data = Vec::new();
+        println!("virt {} phys {} factor {}", sector, phy_sec, factor);
         for i in 0..factor {
             self.device.read_all_sector(phy_sec + i, &mut data)?;
         }
@@ -125,7 +128,7 @@ impl BlockDevice for CachedDevice {
     fn read_sector(&mut self, n: u64, buf: &mut [u8]) -> io::Result<usize> {
         let sec = self.get(n)?;
         let len = min(sec.len(), buf.len());
-        buf.copy_from_slice(&sec[..len]);
+        buf[..len].copy_from_slice(&sec[..len]);
         Ok(len)
     }
 
@@ -136,7 +139,7 @@ impl BlockDevice for CachedDevice {
         }
         let sec = self.get_mut(n)?;
         let len = min(sec.len(), buf.len());
-        sec.copy_from_slice(&buf[..len]);
+        sec[..len].copy_from_slice(&buf[..len]);
         Ok(len)
     }
 }
@@ -146,6 +149,7 @@ impl fmt::Debug for CachedDevice {
         f.debug_struct("CachedDevice")
 //            .field("device", &"<block device>")
             .field("cache", &self.cache)
+            .field("partition", &self.partition)
             .finish()
     }
 }

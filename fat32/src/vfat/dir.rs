@@ -47,10 +47,12 @@ pub struct VFatRegularDirEntry {
     attr: Attributes,
     win_nt_reserved: u8,
     ctime_tenth_sec: u8,
-    ctime: Timestamp,
+    ctime: Time,
+    cdate: Date,
     adate: Date,
     cluster_num_hi: u16,
-    mtime: Timestamp,
+    mtime: Time,
+    mdate: Date,
     cluster_num_lo: u16,
     file_sz: u32,
 }
@@ -59,10 +61,18 @@ impl VFatRegularDirEntry {
     pub fn metadata(&self) -> Metadata {
         Metadata {
             attr: self.attr,
-            ctime_tenth_sec: self.ctime_tenth_sec,
-            ctime: self.ctime,
-            adate: self.adate,
-            mtime: self.mtime,
+            ctime: Timestamp{
+                time: self.ctime,
+                date: self.cdate,
+            },
+            atime: Timestamp{
+                time: Time(0),
+                date: self.adate,
+            },
+            mtime: Timestamp{
+                time: self.mtime,
+                date: self.mdate,
+            },
         }
     }
 
@@ -225,7 +235,7 @@ impl traits::Dir for Dir {
 
     /// Returns an interator over the entries in this directory.
     fn entries(&self) -> io::Result<Self::Iter> {
-        println!("{:?}", self.vfat.borrow());
+//        println!("{:?}", self.vfat.clone());
         let mut buf = Vec::new();
         self.vfat.borrow_mut()
             .read_chain(self.first_cluster, &mut buf)

@@ -26,20 +26,17 @@ impl VFat {
         where T: BlockDevice + 'static
     {
         let mbr = MasterBootRecord::from(&mut device)?;
-//        println!("mbr {:?}", mbr);
         let bpb_start = mbr.first_fat32().ok_or(Error::NotFound)?
                            .relative_sector as u64;
         let ebpb = BiosParameterBlock::from(&mut device, bpb_start)?;
-        println!("{:?}", mbr);
-        println!("{:?}", ebpb);
-        let fat_start_sector = ebpb.num_reserved_sectors as u64;
+//        println!("{:?}", mbr);
+//        println!("{:?}", ebpb);
+        let fat_start_sector = bpb_start + ebpb.num_reserved_sectors as u64;
         let data_start_sector = fat_start_sector +
             (ebpb.num_fat as u64) * ebpb.sectors_per_fat() as u64;
-//        println!("fat_start_sector {} ebpb.num_fat {} ebpb.sectors_per_fat() {}", fat_start_sector, ebpb.num_fat, ebpb.sectors_per_fat());
-//        println!("ebpb {:?}", ebpb);
         let dev = CachedDevice::new(device, 
                                     Partition{
-                                        start: fat_start_sector,
+                                        start: bpb_start,
                                         sector_size: ebpb.bytes_per_sector as u64,
                                     });
 
@@ -67,7 +64,8 @@ impl VFat {
     pub fn read_cluster(&mut self, cluster: Cluster, offset: usize, buf: &mut [u8])
         -> io::Result<usize> {
 //        println!("vfat {:?}", self);
-        let cluster_start = (cluster.get_index() - 1) as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
+//        println!("cluster {}, self.bytes_per_sector {}, self.device.sector_size {}", cluster.get_index(), self.bytes_per_sector, self.device.sector_size());
+        let cluster_start = (cluster.get_index() - 2) as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
         let start_sector = cluster_start + offset as u64;
         let end_sector = cluster_start + self.sectors_per_cluster as u64;
         let can_read = buf.len() / self.bytes_per_sector as usize;
@@ -116,10 +114,11 @@ impl VFat {
         let index_in_sector = cluster.get_index() as usize % entries_per_sector;
         let sec = self.device.get(nth_sec_in_fat as u64 + self.fat_start_sector as u64)?;
         let entries: &[FatEntry] = unsafe { sec.cast() };
-
-        let entry = entries[index_in_sector];
 //        println!("cluster: {:?} entries_per_sector {} nth_sec_in_fat {} entries.len {}, index_in_sector {}, entries {:?}",
 //                 cluster, entries_per_sector, nth_sec_in_fat, entries.len(), index_in_sector, entries);
+//        println!("{:?}", entries);
+
+        let entry = entries[index_in_sector];
         Ok(&entries[index_in_sector])
     }
 }
