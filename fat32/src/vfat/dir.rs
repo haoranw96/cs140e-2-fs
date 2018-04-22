@@ -4,6 +4,8 @@ use std::borrow::Cow;
 use std::io;
 use std::collections::HashMap;
 use std::string::String;
+use std::str;
+use std::mem;
 
 use traits;
 use util::VecExt;
@@ -94,7 +96,7 @@ pub struct VFatLfnDirEntry {
 #[repr(C, packed)]
 #[derive(Copy, Clone, Debug)]
 pub struct VFatUnknownDirEntry {
-    id: u8,
+    seq: u8,
     reserved1: [u8; 10],
     attr: Attributes,
     reserved2: [u8; 20],
@@ -144,85 +146,84 @@ pub struct VFatDirEntryIter {
 impl Iterator for VFatDirEntryIter {
     type Item = Entry;
     fn next(&mut self) -> Option<Self::Item> {
-        let mut name_hash = HashMap::new();
+        let mut lfn_vec = [0u16; 13 * 31]; // Max lfn length 13 u16 * 31 entries
+        let mut has_lfn = false;
         
-        for (i, entry) in self.entries.as_slice()[self.iter..].iter().enumerate() {
-            if entry.id == 0x00 { return None; }
-            else if entry.id == 0xE5 { 
-                self.iter += 1;
+        for entry in self.entries[self.iter..].iter() {
+//            println!("self.iter {}", self.iter);
+            self.iter += 1;
+            if entry.seq == 0x00 {
+                return None; 
+            } else if entry.seq == 0xE5 { 
+//                println!("skip");
                 continue 
             }
 
-            if entry.attr.0 == 15 {
-                let mut v = Vec::new();
-                let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry as *const VFatLfnDirEntry) };
-                v.extend_from_slice(&entry.chars1);
-                v.extend_from_slice(&entry.chars2);
-                v.extend_from_slice(&entry.chars3);
-                name_hash.insert(i, v);
+            if entry.attr.lfn() {
+                has_lfn = true;
+                let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry
+                                       as *const VFatLfnDirEntry) };
+                let seq = (entry.seq as usize & 0x1F) - 1;
+                lfn_vec[seq * 13      ..seq * 13 + 5 ].copy_from_slice(&entry.chars1);
+                lfn_vec[seq * 13 + 5  ..seq * 13 + 11].copy_from_slice(&entry.chars2);
+                lfn_vec[seq * 13 + 11 ..seq * 13 + 13].copy_from_slice(&entry.chars3);
+                
+                let mut name = Vec::new();
+                name.extend_from_slice(&entry.chars1);
+                name.extend_from_slice(&entry.chars2);
+                name.extend_from_slice(&entry.chars3);
+
+//                println!("{}", String::from_utf16(&name).unwrap());
             } else {
-                break;
+                let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry
+                                       as *const VFatRegularDirEntry) };
+
+                let name = if !has_lfn {
+                    let mut name = entry.name.clone();
+//                    if name[0] == 0x05 {
+//                        // 0x05 is used for real 0xE5 as first byte
+//                        name[0] = 0xE5;
+//                    }
+
+                    let name = str::from_utf8(&name).unwrap().trim_right();
+                    let ext = str::from_utf8(&entry.ext).unwrap().trim_right();
+
+                    let mut name_str = String::from(name);
+                    if ext.len() > 0 {
+                        name_str.push_str(&".");
+                        name_str.push_str(&ext);
+                    }
+//                    println!("shortname {}", &name_str);
+                    name_str
+                } else {
+                    let len = lfn_vec.iter().position(|&c| c == 0x0000 || c == 0xFFFF)
+                                     .or(Some(lfn_vec.len())).unwrap();
+                    String::from_utf16(&lfn_vec[..len]).ok()?
+                };
+        
+                let first_cluster = Cluster::from((entry.cluster_num_hi as u32) << 16 
+                                    | entry.cluster_num_lo as u32);
+
+//                println!("name {}", &name);
+                return if entry.attr.directory() {
+                    Some(Entry::Dir(Dir{
+                        name: name,
+                        first_cluster: first_cluster,
+                        vfat: self.vfat.clone(),
+                        metadata: entry.metadata(),
+                    }))
+                } else {
+                    Some(Entry::File(File{
+                        name: name,
+                        first_cluster: first_cluster,
+                        vfat: self.vfat.clone(),
+                        metadata: entry.metadata(),
+                    }))
+                };
             }
-            self.iter += 1;
         }
-
-        let entry = unsafe{ &*(&self.entries.as_slice()[self.iter]
-                               as *const VFatUnknownDirEntry 
-                               as *const VFatRegularDirEntry) };
-
-        let name = if name_hash.len() == 0 {
-            let mut name_vec = Vec::new();
-            name_vec.extend_from_slice(&entry.name);
-            if entry.ext != [b'\0', b'\0', b'\0'] {
-                name_vec.push(b'.');
-                name_vec.extend_from_slice(&entry.ext);
-            }
-//            println!("name vec u8 {:?}", name_vec);
-            let mut i = 0;
-            for i in 0..name_vec.len() {
-                if name_vec[i] == 0x00 || name_vec[i] == 0x20 {
-                    name_vec.truncate(i);
-                    break;
-                }
-            }
-            String::from_utf8(name_vec).ok()?
-        } else {
-            let mut name_vec : Vec<u16> = Vec::new();
-            for seq in 0..name_hash.len() {
-                let mut chars = name_hash.remove(&seq)?;
-                name_vec.append(&mut chars);
-            }
-//            println!("name vec {:?}", name_vec);
-            for i in 0..name_vec.len() {
-                if name_vec[i] == 0x0000 || name_vec[i] == 0xFFFF {
-                    name_vec.truncate(i);
-                    break
-                }
-            }
-            String::from_utf16(&name_vec).ok()?
-        };
-        let first_cluster = (entry.cluster_num_hi as u32) << 16 | entry.cluster_num_lo as u32;
-
-        let metadata = entry.metadata();
-
-        self.iter += 1;
-        if entry.attr.directory() {
-            Some(Entry::Dir(Dir{
-                name: name,
-                first_cluster: Cluster::from(first_cluster),
-                vfat: self.vfat.clone(),
-                metadata: metadata,
-            }))
-        } else {
-            Some(Entry::File(File{
-                name: name,
-                first_cluster: Cluster::from(first_cluster),
-                vfat: self.vfat.clone(),
-                metadata: metadata,
-            }))
-        }
+        None
     }
-
 }
 
 // FIXME: Implement `trait::Dir` for `Dir`.
@@ -236,6 +237,7 @@ impl traits::Dir for Dir {
     /// Returns an interator over the entries in this directory.
     fn entries(&self) -> io::Result<Self::Iter> {
 //        println!("{:?}", self.vfat.clone());
+//        println!("entries per sector: {}", self.vfat.borrow().bytes_per_sector / mem::size_of::<VFatUnknownDirEntry>() as u16);
         let mut buf = Vec::new();
         self.vfat.borrow_mut()
             .read_chain(self.first_cluster, &mut buf)

@@ -75,10 +75,10 @@ impl CachedDevice {
     fn read_entry_from_dev(&mut self, sector: u64)
         -> io::Result<CacheEntry> {
         let (phy_sec, factor) = self.virtual_to_physical(sector);
-//        let mut data = Vec::with_capacity(self.partition.sector_size as usize);
-        let mut data = Vec::new();
-        println!("virt {} phys {} factor {}", sector, phy_sec, factor);
+        let mut data = Vec::with_capacity((self.device.sector_size() * factor) as usize);
+//        println!("virt {} phys {} factor {}", sector, phy_sec, factor);
         for i in 0..factor {
+//            println!("reading physical sector {}", phy_sec + i);
             self.device.read_all_sector(phy_sec + i, &mut data)?;
         }
         let entry = CacheEntry {

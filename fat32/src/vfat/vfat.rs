@@ -68,10 +68,10 @@ impl VFat {
         let cluster_start = (cluster.get_index() - 2) as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
         let start_sector = cluster_start + offset as u64;
         let end_sector = cluster_start + self.sectors_per_cluster as u64;
-        let can_read = buf.len() / self.bytes_per_sector as usize;
-        let mut read = 0;
-        let can_read_end = min(end_sector, start_sector + can_read as u64);
+        let can_read = buf.len() as u64 / self.bytes_per_sector as u64;
+        let can_read_end = min(end_sector, start_sector + can_read);
 
+        let mut read = 0;
         for i in start_sector..can_read_end {
             read += self.device.read_sector(i, &mut buf[read..])?;
         }
@@ -91,8 +91,9 @@ impl VFat {
         let mut read = 0;
 //        println!("read chain from {:?}", start);
         loop {
-            buf.resize((self.bytes_per_sector as usize) * self.sectors_per_cluster as usize, 0);
-            read += self.read_cluster(cur_cluster, 0, &mut buf.as_mut_slice()[read..])?;
+            let buflen = buf.len();
+            buf.resize(buflen + self.bytes_per_sector as usize * self.sectors_per_cluster as usize, 0);
+            read += self.read_cluster(cur_cluster, 0, &mut buf[read..])?;
             match self.fat_entry(cur_cluster)?.status() {
                 Status::Data(next_cluster) => {
                     cur_cluster = next_cluster; }
