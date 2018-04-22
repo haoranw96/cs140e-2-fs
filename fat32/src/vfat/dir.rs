@@ -213,12 +213,13 @@ impl Iterator for VFatDirEntryIter {
                         metadata: entry.metadata(),
                     }))
                 } else {
-                    Some(Entry::File(File{
-                        name: name,
-                        first_cluster: first_cluster,
-                        vfat: self.vfat.clone(),
-                        metadata: entry.metadata(),
-                    }))
+                    Some(Entry::File(File::new(name, self.vfat.clone(), first_cluster, entry.metadata())))
+//                    Some(Entry::File(File{
+//                        name: name,
+//                        first_cluster: first_cluster,
+//                        vfat: self.vfat.clone(),
+//                        metadata: entry.metadata(),
+//                    }))
                 };
             }
         }

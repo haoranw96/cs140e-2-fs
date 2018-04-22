@@ -10,11 +10,23 @@ pub struct File {
     pub vfat: Shared<VFat>,
     pub first_cluster: Cluster,
     pub metadata: Metadata,
+    file_ptr: usize,
 
     // FIXME: Fill me in.
 }
 
 impl File {
+    pub fn new(name: String, vfat: Shared<VFat>, first_cluster: Cluster,
+               metadata: Metadata) -> Self {
+        File {
+            name: name,
+            vfat: vfat,
+            first_cluster: first_cluster,
+            metadata: metadata,
+            file_ptr: 0
+        }
+    
+    }
     pub fn name(&self) -> &String {
         &self.name
     }
@@ -40,12 +52,23 @@ impl traits::File for File {
 
 impl io::Read for File {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut v = Vec::new();
-        let read = self.vfat.borrow_mut().read_chain(self.first_cluster, &mut v)?;
-        let can_read = min(buf.len(), read);
-        for i in 0..can_read {
-            buf[i] = v.as_slice()[i];
+        println!("name {}, first clulster {:?} size {}, fileptr {}", self.name(), self.first_cluster, self.metadata.size, self.file_ptr);
+        if self.metadata.size == 0 {
+            return Ok(0);
         }
+
+        let mut v = Vec::new();
+        let _read = self.vfat.borrow_mut().read_chain(self.first_cluster, &mut v)?;
+//        assert_eq!(read, self.metadata.size);
+
+        let file_left = self.metadata.size as usize - self.file_ptr;
+        let can_read = min(file_left, buf.len());
+//        println!("can read {}", can_read);
+        buf[..can_read].copy_from_slice(&v[self.file_ptr..self.file_ptr+can_read]);
+        self.file_ptr += can_read;
+//        for i in 0..can_read {
+//            buf[i] = v.as_slice()[i];
+//        }
         Ok(can_read)
     }
 
