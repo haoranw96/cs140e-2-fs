@@ -1,5 +1,5 @@
 use std::io;
-use std::slice;
+//use std::slice;
 use std::path::{Path, Component};
 use std::cmp::min;
 use std::mem;
@@ -118,8 +118,7 @@ impl VFat {
 //        println!("cluster: {:?} entries_per_sector {} nth_sec_in_fat {} entries.len {}, index_in_sector {}, entries {:?}",
 //                 cluster, entries_per_sector, nth_sec_in_fat, entries.len(), index_in_sector, entries);
 //        println!("{:?}", entries);
-
-        let entry = entries[index_in_sector];
+//        let entry = entries[index_in_sector];
         Ok(&entries[index_in_sector])
     }
 }
@@ -151,7 +150,6 @@ impl<'a> FileSystem for &'a Shared<VFat> {
             }
         }
         Ok(cur_dir)
-//        unimplemented!("FileSystem::open()")
     }
 
     fn create_file<P: AsRef<Path>>(self, _path: P) -> io::Result<Self::File> {

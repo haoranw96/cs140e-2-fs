@@ -1,11 +1,10 @@
 use std::ffi::OsStr;
-use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
-use std::borrow::Cow;
+//use std::char::{decode_utf16, REPLACEMENT_CHARACTER};
+//use std::borrow::Cow;
 use std::io;
-use std::collections::HashMap;
 use std::string::String;
 use std::str;
-use std::mem;
+//use std::mem;
 
 use traits;
 use util::VecExt;
@@ -242,7 +241,7 @@ impl traits::Dir for Dir {
         let mut buf = Vec::new();
         self.vfat.borrow_mut()
             .read_chain(self.first_cluster, &mut buf)
-            .and_then(|read| 
+            .and_then(|_read| 
                 Ok(VFatDirEntryIter{entries: unsafe { buf.cast() }, 
                                     vfat: self.vfat.clone(),
                                     iter: 0})

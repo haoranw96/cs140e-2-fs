@@ -10,7 +10,7 @@ pub struct Date(u16);
 impl Date {
     pub fn year(&self) -> usize { (self.0 >> 9) as usize + 1980 }
 
-    pub fn month(&self) -> u8 { (self.0 as u8 & 0x1E0) >> 5 }
+    pub fn month(&self) -> u8 { ((self.0 & 0x1E0) >> 5) as u8 }
 
     pub fn day(&self) -> u8 { self.0 as u8 & 0x1F }
 }
