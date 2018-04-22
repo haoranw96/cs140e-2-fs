@@ -77,12 +77,6 @@ impl Attributes {
 pub struct Timestamp {
     pub time: Time,
     pub date: Date,
-//    pub year: usize,
-//    pub month: u8,
-//    pub day: u8,
-//    pub hour: u8,
-//    pub minute: u8,
-//    pub second: u8
 }
 
 /// Metadata for a directory entry.

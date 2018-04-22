@@ -5,7 +5,7 @@ use std::cmp::min;
 use std::mem;
 
 use util::SliceExt;
-use mbr::{MasterBootRecord, PartitionEntry, CHS};
+use mbr::{MasterBootRecord};
 use vfat::{Shared, Cluster, File, Dir, Entry, FatEntry, Error, Status};
 use vfat::{BiosParameterBlock, CachedDevice, Partition};
 use traits::{FileSystem, BlockDevice};
