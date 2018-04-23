@@ -180,11 +180,6 @@ impl Iterator for VFatDirEntryIter {
 
                 let name = if !has_lfn {
                     let mut name = entry.name.clone();
-//                    if name[0] == 0x05 {
-//                        // 0x05 is used for real 0xE5 as first byte
-//                        name[0] = 0xE5;
-//                    }
-
                     let name = str::from_utf8(&name).unwrap().trim_right();
                     let ext = str::from_utf8(&entry.ext).unwrap().trim_right();
 
@@ -197,10 +192,10 @@ impl Iterator for VFatDirEntryIter {
                     name_str
                 } else {
                     let len = lfn_vec.iter().position(|&c| c == 0x0000 || c == 0xFFFF)
-                                     .or(Some(lfn_vec.len())).unwrap();
+                                     .unwrap_or_else(||lfn_vec.len());
                     String::from_utf16(&lfn_vec[..len]).ok()?
                 };
-        
+
                 let first_cluster = Cluster::from((entry.cluster_num_hi as u32) << 16 
                                     | entry.cluster_num_lo as u32);
 
@@ -214,12 +209,6 @@ impl Iterator for VFatDirEntryIter {
                     }))
                 } else {
                     Some(Entry::File(File::new(name, self.vfat.clone(), first_cluster, entry.metadata())))
-//                    Some(Entry::File(File{
-//                        name: name,
-//                        first_cluster: first_cluster,
-//                        vfat: self.vfat.clone(),
-//                        metadata: entry.metadata(),
-//                    }))
                 };
             }
         }

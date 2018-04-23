@@ -1,4 +1,3 @@
-use vfat::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Copy, Clone, Hash)]
 pub struct Cluster(u32);
@@ -12,5 +11,9 @@ impl From<u32> for Cluster {
 // TODO: Implement any useful helper methods on `Cluster`.
 impl Cluster {
     pub fn get_index(&self) -> u32 { self.0 }
+
+    pub fn get_offset(&self) -> Option<u32> { 
+        self.0.checked_sub(2)
+    }
 }
 

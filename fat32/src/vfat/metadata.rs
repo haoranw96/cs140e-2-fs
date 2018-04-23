@@ -67,7 +67,7 @@ impl Attributes {
     }
 
     pub fn lfn(&self) -> bool {
-        self.0 & Self::LFN == Self::LFN
+        self.0 == Self::LFN
     }
 }
 

@@ -52,7 +52,7 @@ impl traits::File for File {
 
 impl io::Read for File {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        println!("name {}, first clulster {:?} size {}, fileptr {}", self.name(), self.first_cluster, self.metadata.size, self.file_ptr);
+//        println!("name {}, first clulster {:?} size {}, fileptr {}", self.name(), self.first_cluster, self.metadata.size, self.file_ptr);
         if self.metadata.size == 0 {
             return Ok(0);
         }

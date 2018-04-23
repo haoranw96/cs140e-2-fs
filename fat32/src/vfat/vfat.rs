@@ -65,7 +65,7 @@ impl VFat {
         -> io::Result<usize> {
 //        println!("vfat {:?}", self);
 //        println!("cluster {}, self.bytes_per_sector {}, self.device.sector_size {}", cluster.get_index(), self.bytes_per_sector, self.device.sector_size());
-        let cluster_start = (cluster.get_index() - 2) as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
+        let cluster_start = cluster.get_offset().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "invalid cluster number ")).unwrap() as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
         let start_sector = cluster_start + offset as u64;
         let end_sector = cluster_start + self.sectors_per_cluster as u64;
         let can_read = buf.len() as u64 / self.bytes_per_sector as u64;

@@ -1,4 +1,4 @@
-use std::{fmt, io, mem, slice};
+use std::{fmt, io, mem};
 
 use traits::BlockDevice;
 

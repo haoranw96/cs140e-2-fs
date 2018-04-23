@@ -1,5 +1,5 @@
 use std::fmt;
-use std::{slice, mem};
+use std::{mem};
 
 use traits::BlockDevice;
 use vfat::Error;
