@@ -150,12 +150,10 @@ impl Iterator for VFatDirEntryIter {
         let mut has_lfn = false;
         
         for entry in self.entries[self.iter..].iter() {
-//            println!("self.iter {}", self.iter);
             self.iter += 1;
             if entry.seq == 0x00 {
                 return None; 
             } else if entry.seq == 0xE5 { 
-//                println!("skip");
                 continue 
             }
 
@@ -167,13 +165,6 @@ impl Iterator for VFatDirEntryIter {
                 lfn_vec[seq * 13      ..seq * 13 + 5 ].copy_from_slice(&entry.chars1);
                 lfn_vec[seq * 13 + 5  ..seq * 13 + 11].copy_from_slice(&entry.chars2);
                 lfn_vec[seq * 13 + 11 ..seq * 13 + 13].copy_from_slice(&entry.chars3);
-                
-                let mut name = Vec::new();
-                name.extend_from_slice(&entry.chars1);
-                name.extend_from_slice(&entry.chars2);
-                name.extend_from_slice(&entry.chars3);
-
-//                println!("{}", String::from_utf16(&name).unwrap());
             } else {
                 let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry
                                        as *const VFatRegularDirEntry) };
