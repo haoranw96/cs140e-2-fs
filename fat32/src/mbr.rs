@@ -69,15 +69,9 @@ impl MasterBootRecord {
     }
 
     pub fn first_fat32(&self) -> Option<&PartitionEntry> {
-        for i in 0..self.partition_table.len() {
-            let p = self.partition_table[i];
-            if p.partition_type == 0xB || p.partition_type == 0xC {
-                return Some(&self.partition_table[i])
-            }
-        }
-        None
+        self.partition_table.iter()
+            .find(|part| part.partition_type == 0xB || part.partition_type == 0xC)
     }
-
 }
 
 impl fmt::Debug for MasterBootRecord {

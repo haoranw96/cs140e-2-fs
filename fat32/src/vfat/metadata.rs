@@ -83,11 +83,9 @@ pub struct Timestamp {
 #[derive(Default, Debug, Clone)]
 pub struct Metadata {
     pub attr: Attributes,
-//    pub ctime_tenth_sec: u8,
     pub ctime: Timestamp,
     pub atime: Timestamp,
     pub mtime: Timestamp,
-    pub size: u32,
 }
 
 impl traits::Timestamp for Timestamp {

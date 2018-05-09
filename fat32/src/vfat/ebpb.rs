@@ -42,8 +42,23 @@ pub struct BiosParameterBlock {
 }
 
 impl BiosParameterBlock {
-    fn modify_byte_order(bpb: BiosParameterBlock) -> BiosParameterBlock {
-        // Too lazy to implement, should have no problem on pi
+    fn modify_byte_order(mut bpb: BiosParameterBlock) -> BiosParameterBlock {
+        bpb.bytes_per_sector = u16::from_le(bpb.bytes_per_sector);
+        bpb.num_reserved_sectors = u16::from_le(bpb.num_reserved_sectors);
+        bpb.max_dir_entries = u16::from_le(bpb.max_dir_entries);
+        bpb.total_logical_sectors = u16::from_le(bpb.total_logical_sectors);
+        bpb.sectors_per_fat = u16::from_le(bpb.sectors_per_fat);
+        bpb.sectors_per_track = u16::from_le(bpb.sectors_per_track);
+        bpb.num_heads = u16::from_le(bpb.num_heads);
+        bpb.num_hidden_sectors = u32::from_le(bpb.num_hidden_sectors);
+        bpb.total_logical_sectors_32 = u32::from_le(bpb.total_logical_sectors_32);
+        bpb.sectors_per_fat_32 = u32::from_le(bpb.sectors_per_fat_32);
+        bpb.flags = u16::from_le(bpb.flags);
+        bpb.root_cluster = u32::from_le(bpb.root_cluster);
+        bpb.fsinfo_sector = u16::from_le(bpb.fsinfo_sector);
+        bpb.backup_boot_sector = u16::from_le(bpb.backup_boot_sector);
+        bpb.volumn_id = u32::from_le(bpb.volumn_id);
+        bpb.bootable_signature = u16::from_le(bpb.bootable_signature);
         bpb
     }
 
@@ -79,6 +94,7 @@ impl BiosParameterBlock {
             return Err(Error::Io(e));
         }
         let bpb : BiosParameterBlock = unsafe{ mem::transmute(bpb_buf) };
+        let bpb = Self::modify_byte_order(bpb);
 
         if bpb.bootable_signature != 0xAA55 {
             return Err(Error::BadSignature);

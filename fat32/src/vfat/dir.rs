@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 use std::io;
 use std::string::String;
 use std::str;
-//use std::mem;
+use std::vec::IntoIter;
 
 use traits;
 use util::VecExt;
@@ -74,7 +74,6 @@ impl VFatRegularDirEntry {
                 time: self.mtime,
                 date: self.mdate,
             },
-            size: self.file_sz,
         }
     }
 
@@ -128,51 +127,44 @@ impl Dir {
                            .ok_or(io::Error::new(io::ErrorKind::InvalidInput,
                                        "input contains invalid UTF-8 char")
                                   )?;
-        for entry in self.entries()? {
-            if entry.name().eq_ignore_ascii_case(name_str) {
-                return Ok(entry);
-            }
-        }
-        return Err(io::Error::new(io::ErrorKind::NotFound, "name not found"));
+        self.entries()?
+            .find(|entry| entry.name().eq_ignore_ascii_case(name_str))
+            .ok_or(io::Error::new(io::ErrorKind::NotFound, "name not found"))
     }
 }
 
 pub struct VFatDirEntryIter {
-    entries: Vec<VFatUnknownDirEntry>,
+    entries: IntoIter<VFatDirEntry>,
     vfat: Shared<VFat>,
-    iter: usize,
 }
 
 impl Iterator for VFatDirEntryIter {
     type Item = Entry;
     fn next(&mut self) -> Option<Self::Item> {
-        let mut lfn_vec = [0u16; 13 * 31]; // Max lfn length 13 u16 * 31 entries
+        let mut lfn_vec = [0u16; 13 * 31]; // Max lfn length = 13 u16 * 31 entries
         let mut has_lfn = false;
-        
-        for entry in self.entries[self.iter..].iter() {
-            self.iter += 1;
-            if entry.seq == 0x00 {
+
+        for ref entry in self.entries.by_ref() {
+            let unknown_entry = unsafe { entry.unknown };
+            if unknown_entry.seq == 0x00 {
                 return None; 
-            } else if entry.seq == 0xE5 { 
-                continue 
+            } else if unknown_entry.seq == 0xE5 {
+                continue
             }
 
-            if entry.attr.lfn() {
+            if unknown_entry.attr.lfn() {
+                let entry = unsafe { entry.long_filename };
                 has_lfn = true;
-                let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry
-                                       as *const VFatLfnDirEntry) };
-                let seq = (entry.seq as usize & 0x1F) - 1;
+                let seq = (entry.seq & 0x1F) as usize - 1;
                 lfn_vec[seq * 13      ..seq * 13 + 5 ].copy_from_slice(&entry.chars1);
                 lfn_vec[seq * 13 + 5  ..seq * 13 + 11].copy_from_slice(&entry.chars2);
                 lfn_vec[seq * 13 + 11 ..seq * 13 + 13].copy_from_slice(&entry.chars3);
             } else {
-                let entry = unsafe{ &*(entry as *const VFatUnknownDirEntry
-                                       as *const VFatRegularDirEntry) };
-
+                let entry = unsafe { entry.regular };
                 let name = if !has_lfn {
                     let mut name = entry.name.clone();
-                    let name = str::from_utf8(&name).unwrap().trim_right();
-                    let ext = str::from_utf8(&entry.ext).unwrap().trim_right();
+                    let name = str::from_utf8(&name).ok()?.trim_right();
+                    let ext = str::from_utf8(&entry.ext).ok()?.trim_right();
 
                     let mut name_str = String::from(name);
                     if ext.len() > 0 {
@@ -188,19 +180,19 @@ impl Iterator for VFatDirEntryIter {
                 };
 
                 let first_cluster = Cluster::from((entry.cluster_num_hi as u32) << 16 
-                                    | entry.cluster_num_lo as u32);
+                                                 | entry.cluster_num_lo as u32);
 
 //                println!("name {}", &name);
-                return if entry.attr.directory() {
-                    Some(Entry::Dir(Dir{
+                return Some(if entry.attr.directory() {
+                    Entry::Dir(Dir{
                         name: name,
                         first_cluster: first_cluster,
                         vfat: self.vfat.clone(),
                         metadata: entry.metadata(),
-                    }))
+                    })
                 } else {
-                    Some(Entry::File(File::new(name, self.vfat.clone(), first_cluster, entry.metadata())))
-                };
+                    Entry::File(File::new(name, self.vfat.clone(), first_cluster, entry.metadata(), entry.file_sz))
+                });
             }
         }
         None
@@ -222,10 +214,9 @@ impl traits::Dir for Dir {
         let mut buf = Vec::new();
         self.vfat.borrow_mut()
             .read_chain(self.first_cluster, &mut buf)
-            .and_then(|_read| 
-                Ok(VFatDirEntryIter{entries: unsafe { buf.cast() }, 
-                                    vfat: self.vfat.clone(),
-                                    iter: 0})
+            .and_then(|_read|
+                Ok(VFatDirEntryIter{entries: unsafe { buf.cast() }.into_iter(),
+                                    vfat: self.vfat.clone()})
             )
     }
 }

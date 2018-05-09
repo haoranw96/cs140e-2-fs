@@ -51,21 +51,16 @@ impl VFat {
         }))
     }
 
-    // TODO: The following methods may be useful here:
-    //
     //  * A method to read from an offset of a cluster into a buffer.
-    //
-    //    fn read_cluster(
-    //        &mut self,
-    //        cluster: Cluster,
-    //        offset: usize,
-    //        buf: &mut [u8]
-    //    ) -> io::Result<usize>;
     pub fn read_cluster(&mut self, cluster: Cluster, offset: usize, buf: &mut [u8])
         -> io::Result<usize> {
 //        println!("vfat {:?}", self);
 //        println!("cluster {}, self.bytes_per_sector {}, self.device.sector_size {}", cluster.get_index(), self.bytes_per_sector, self.device.sector_size());
-        let cluster_start = cluster.get_offset().ok_or(io::Error::new(io::ErrorKind::InvalidInput, "invalid cluster number ")).unwrap() as u64 * self.sectors_per_cluster as u64 + self.data_start_sector;
+        let cluster_start = self.data_start_sector
+            + cluster.get_offset()
+                     .ok_or(io::Error::new(io::ErrorKind::InvalidInput, 
+                            format!("invalid cluster number {:?}", cluster)))? as u64
+            * self.sectors_per_cluster as u64;
         let start_sector = cluster_start + offset as u64;
         let end_sector = cluster_start + self.sectors_per_cluster as u64;
         let can_read = buf.len() as u64 / self.bytes_per_sector as u64;
@@ -80,12 +75,6 @@ impl VFat {
 
     //  * A method to read all of the clusters chained from a starting cluster
     //    into a vector.
-    //
-    //    fn read_chain(
-    //        &mut self,
-    //        start: Cluster,
-    //        buf: &mut Vec<u8>
-    //    ) -> io::Result<usize>;
     pub fn read_chain(&mut self, start: Cluster, buf: &mut Vec<u8>) -> io::Result<usize> {
         let mut cur_cluster = start;
         let mut read = 0;
@@ -107,13 +96,12 @@ impl VFat {
 
     //  * A method to return a reference to a `FatEntry` for a cluster where the
     //    reference points directly into a cached sector.
-    //
-    //    fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry>;
     pub fn fat_entry(&mut self, cluster: Cluster) -> io::Result<&FatEntry> {
         let entries_per_sector = self.bytes_per_sector as usize / mem::size_of::<FatEntry>();
-        let nth_sec_in_fat = cluster.get_index() as usize / entries_per_sector;
-        let index_in_sector = cluster.get_index() as usize % entries_per_sector;
-        let sec = self.device.get(nth_sec_in_fat as u64 + self.fat_start_sector as u64)?;
+        let cluster_idx = cluster.get_index() as usize;
+        let nth_sec_in_fat = cluster_idx / entries_per_sector;
+        let index_in_sector = cluster_idx % entries_per_sector;
+        let sec = self.device.get(self.fat_start_sector as u64 + nth_sec_in_fat as u64)?;
         let entries: &[FatEntry] = unsafe { sec.cast() };
 //        println!("cluster: {:?} entries_per_sector {} nth_sec_in_fat {} entries.len {}, index_in_sector {}, entries {:?}",
 //                 cluster, entries_per_sector, nth_sec_in_fat, entries.len(), index_in_sector, entries);
